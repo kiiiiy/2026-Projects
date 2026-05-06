@@ -6,9 +6,8 @@
 
 ### Summary
 
-> Kubernetes 클러스터 내부에서 공격자가 컨테이너 간을 이동하는 행위(Lateral Movement)를, 기존 도구가 보지 못하던 네트워크 레이어를 eBPF로 탐지한다.
+Kubernetes 클러스터 내부에서 공격자가 컨테이너 간을 이동하는 행위(Lateral Movement)를, 기존 도구가 보지 못하던 네트워크 레이어를 eBPF로 탐지한다.
 
----
 
 ### 핵심 개념
 
