@@ -330,7 +330,6 @@ eBPF를 활용하여 outer(node), inner(pod), process 세 레이어의 정보를
 5. Zhang, R. et al., "eBPF-Guard: A Detection Method for Container Escape via Multi-level Monitoring," *Empirical Software Engineering*, Springer, 2025.
    - kernel namespace+cgroup 기반 cross-host container interaction 모니터링 체인 구성
 
----
 
 ### eBPF 기반 보안 도구 비교 (Falco / Tetragon / Tracee)
 
@@ -340,7 +339,6 @@ eBPF를 활용하여 outer(node), inner(pod), process 세 레이어의 정보를
 7. AccuKnox, "Container Runtime Security Tooling Comparison," *Technical Report*, 2023.
    - Falco/Tetragon/KubeArmor 관측 범위, 정책 지원, 오버헤드 실용적 비교
 
----
 
 ### Kubernetes 보안 / Lateral Movement
 
@@ -353,7 +351,6 @@ eBPF를 활용하여 outer(node), inner(pod), process 세 레이어의 정보를
 10. Tigera, "Kubernetes Security: Lateral Movement Detection and Defense," *Technical Blog*, 2023.
     - East-West 트래픽 기반 lateral movement 탐지 실용적 분석 및 eBPF 기반 대응 방안
 
----
 
 ### eBPF 패킷 처리 / VXLAN 프로토콜
 
@@ -366,7 +363,6 @@ eBPF를 활용하여 outer(node), inner(pod), process 세 레이어의 정보를
 13. Cilium Project, "Introduction to eBPF in Cilium," *Official Documentation*, 2024.
     - tc hook, eBPF Map, Kubernetes CNI 구현 원리; Hubble flow record 구조
 
----
 
 ### IDS 데이터셋 (기존 데이터셋의 한계 논증)
 
@@ -379,8 +375,4 @@ eBPF를 활용하여 outer(node), inner(pod), process 세 레이어의 정보를
 16. Tavallaee, M. et al., "A Detailed Analysis of the KDD CUP 99 Data Set," *IEEE CISDA*, 2009.
     - NSL-KDD 데이터셋 원논문; 전통 IDS 벤치마크, East-West microservice 트래픽 미반영
 
----
 
-## 9. Executive Summary
-
-기존 eBPF와 Cilium 관련 연구는 클라우드 네이티브 환경에서 고성능 네트워킹, 네트워크 정책 적용, service mesh 대체, observability 제공에 초점을 맞추고 있습니다. Falco, Tetragon과 같은 보안 도구 역시 syscall 또는 flow를 관측하지만, VXLAN Overlay로 인해 분리되는 outer(node), inner(pod), process 세 레이어의 정보를 단일 이벤트로 결합하는 기능은 제공하지 않습니다. 이 cross-layer correlation이 부재하면, 침해된 Pod에서 발생하는 Lateral Movement가 정상 서비스 트래픽과 동일하게 보여 탐지가 불가능합니다. 본 연구는 eBPF를 활용하여 이 세 레이어를 커널 수준에서 결합하고, 서비스 의존 그래프를 기준으로 East-West Lateral Movement를 탐지하는 방법을 제안합니다. 기존 공개 IDS 데이터셋은 Kubernetes Overlay 맥락을 반영하지 못하므로, 직접 실험 환경을 구축하여 정상 및 공격 트래픽을 생성하고 평가할 계획입니다.
