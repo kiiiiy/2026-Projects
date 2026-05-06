@@ -66,9 +66,8 @@ Overlay 네트워크 환경에서는 정보가 세 레이어에 나뉘어 존재
 
 ---
 
-## Research Rationale
+## Research
 
----
 
 ## 1. Problem Statement
 
