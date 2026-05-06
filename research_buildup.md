@@ -57,8 +57,6 @@ Overlay 네트워크 환경에서는 정보가 세 레이어에 나뉘어 존재
 
 > **eBPF로 세 레이어(node, pod, process)의 정보를 커널에서 하나로 묶고, 이를 서비스 의존 그래프와 비교해 정상 통신이 아닌 것을 Lateral Movement로 탐지한다.**
 
-구체적으로:
-
 1. **수집**: eBPF hook을 활용해 outer node IP, inner pod IP, process 정보를 단일 이벤트로 correlation
 2. **모델링**: 정상 상태의 서비스 의존 그래프(어떤 Pod가 어떤 Pod와 통신해야 하는가)를 구성
 3. **탐지**: 수집된 이벤트에서 그래프에 없는 통신 경로, 비정상 프로세스, Namespace 경계 위반을 이상 행위로 판단
@@ -67,7 +65,6 @@ Overlay 네트워크 환경에서는 정보가 세 레이어에 나뉘어 존재
 ---
 
 ## Research
-
 
 ## 1. Problem Statement
 
