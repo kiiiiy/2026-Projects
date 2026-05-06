@@ -1,6 +1,5 @@
 # Kubernetes Overlay Network에서 eBPF 기반 Cross-layer Visibility를 활용한 Lateral Movement 탐지
 
----
 
 ## Overview
 
