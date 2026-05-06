@@ -179,7 +179,7 @@ eBPF와 Cilium은 Kubernetes 네트워킹과 보안 분야에서 핵심 기술�
 - East-West microservice traffic 구조 미반영
 - Service dependency graph 기반 정상/비정상 관계 표현 불가
 
-즉, 기존 IDS 연구의 방법론을 그대로 Kubernetes Overlay 환경에 적용하면 **탐지에 필요한 핵심 정보가 처음부터 빠져있다**.
+CICIDS2017 [14], NSL-KDD [16], UNSW-NB15 [15]는 이 분야에서 가장 널리 쓰이는 공개 데이터셋이지만, 세 데이터셋 모두 전통적인 네트워크 환경에서 수집되었으며 위의 다섯 가지 맥락 정보를 포함하지 않는다. 즉, 기존 IDS 연구의 방법론을 그대로 Kubernetes Overlay 환경에 적용하면 **탐지에 필요한 핵심 정보가 처음부터 빠져있다**. 따라서 기존 데이터셋을 그대로 사용하는 것은 불가능하며, Kubernetes VXLAN 환경에서 자체 데이터셋을 구축하는 것이 본 연구의 필수 전제조건이다.
 
 ---
 
@@ -311,68 +311,343 @@ eBPF를 활용하여 outer(node), inner(pod), process 세 레이어의 정보를
 
 ---
 
+## 9. Dataset 설계 및 연구 방향
+
+---
+
+### 9.1 실험 환경 구성
+
+#### Kubernetes 클러스터
+
+| 항목 | 선택 | 이유 |
+|------|------|------|
+| 클러스터 도구 | **kind** (Kubernetes in Docker) | 멀티노드 구성이 쉽고, VXLAN cross-node 트래픽을 로컬에서 재현 가능 |
+| 노드 구성 | control-plane × 1, worker × 2 | cross-node 트래픽(pod_A on node-1 → pod_B on node-2) 발생 필수 |
+| CNI | **Flannel (VXLAN 모드)** | VXLAN encapsulation이 가장 직접적으로 드러남; VNI 기본값 1로 고정 |
+| 대안 CNI | Calico (VXLAN 모드) | Flannel 결과 재현성 검증용 |
+
+#### 샘플 애플리케이션
+
+**GCP Online Boutique** (오픈소스 마이크로서비스 데모)를 기반 워크로드로 선택한다.
+
+- 11개 마이크로서비스가 명확한 서비스 의존 그래프를 형성
+- gRPC + HTTP 혼합 트래픽으로 실제 환경과 유사
+- 서비스 간 의존 관계가 문서화되어 있어 **ground truth graph** 구성이 용이
+
+```
+[서비스 의존 그래프 — 정상 통신만 허용되는 edge]
+frontend          → productcatalogservice, cartservice, currencyservice,
+                    shippingservice, checkoutservice, recommendationservice
+checkoutservice   → paymentservice, emailservice, shippingservice,
+                    productcatalogservice, cartservice, currencyservice
+cartservice       → redis
+recommendationservice → productcatalogservice
+```
+
+이 그래프에 없는 edge는 모두 **이상 통신**으로 간주한다.
+
+---
+
+### 9.2 자체 데이터셋 설계
+
+Section 3.3에서 확인했듯, 기존 공개 IDS 데이터셋(CICIDS2017, NSL-KDD, UNSW-NB15)은 Kubernetes Overlay 맥락을 반영하지 못한다. 따라서 본 연구는 다음과 같이 자체 데이터셋을 설계한다.
+
+#### 수집 feature 전체 목록
+
+| 카테고리 | feature | 설명 |
+|----------|---------|------|
+| **Outer (노드 레벨)** | `outer_src_ip` | VXLAN outer 출발지 노드 IP |
+| | `outer_dst_ip` | VXLAN outer 목적지 노드 IP |
+| | `vxlan_vni` | VXLAN Network Identifier |
+| | `outer_ttl` | outer 패킷 TTL |
+| | `outer_packet_len` | outer 패킷 전체 길이 |
+| **Inner (Pod 레벨)** | `inner_src_ip` | pod 출발지 IP |
+| | `inner_dst_ip` | pod 목적지 IP |
+| | `inner_src_port` | 출발지 포트 |
+| | `inner_dst_port` | 목적지 포트 |
+| | `inner_protocol` | TCP / UDP |
+| | `inner_payload_len` | inner 페이로드 길이 |
+| **Process (커널 레벨)** | `pid` | 연결을 생성한 프로세스 ID |
+| | `ppid` | 부모 프로세스 ID |
+| | `process_name` | comm (예: node, python3, bash) |
+| | `cmdline` | 명령줄 인수 (최대 128자) |
+| | `uid` / `gid` | 프로세스 실행 권한 |
+| | `container_id` | cgroup path에서 추출한 컨테이너 ID |
+| **K8s 메타데이터** | `src_pod_name` | 출발지 Pod 이름 |
+| | `src_namespace` | 출발지 Namespace |
+| | `src_node` | 출발지 노드 이름 |
+| | `dst_pod_name` | 목적지 Pod 이름 |
+| | `dst_namespace` | 목적지 Namespace |
+| | `dst_service` | 목적지 Service 이름 |
+| **행위 feature (파생)** | `conn_rate` | 단위 시간당 연결 횟수 |
+| | `unique_dst_count` | 단위 시간 내 고유 목적지 IP 수 |
+| | `unique_dst_port_count` | 고유 목적지 포트 수 |
+| | `cross_namespace_flag` | Namespace 경계 횡단 여부 (bool) |
+| | `fanout_score` | unique_dst / conn_rate (분산도) |
+| | `port_entropy` | 목적지 포트 분포 엔트로피 |
+| **레이블** | `label` | `normal` / `pod_scan` / `port_scan` / `ns_traversal` / `db_direct` / `dns_enum` |
+| | `attack_tool` | 공격에 사용한 도구 (레이블링용) |
+
+#### 수집 파이프라인
+
+```
+eBPF tc hook (host NIC)
+  └─ outer IP 포착 + VXLAN 파싱 → inner IP/port 추출
+       ↓
+eBPF kprobe (tcp_connect / sys_connect)
+  └─ pid, ppid, process_name, container_id, uid 포착
+       ↓
+eBPF Map (pid + netns 기준 join)
+  └─ 단일 raw event 생성
+       ↓
+Userspace collector (Go / Python)
+  └─ K8s API 조회로 pod_name, namespace, node 매핑
+  └─ 행위 feature 집계 (60s sliding window)
+  └─ CSV / Parquet 저장
+```
+
+#### 레이블링 방식
+
+- **정상 구간**: 24시간 이상 Online Boutique 정상 트래픽 + [Locust](https://locust.io/) 부하 생성
+- **공격 구간**: 각 시나리오 실행 전후에 `start_time` / `end_time` 기록 → timestamp 기반 자동 레이블 부착
+- 정상:공격 비율 목표 ≥ 10:1 (실제 환경 반영)
+
+---
+
+### 9.3 공격 시나리오 재현 방법
+
+모든 시나리오는 **침해된 Pod 하나에서 시작**하는 상황을 가정한다. 공격자는 `kubectl exec` 또는 웹쉘로 Pod 내부에 진입한 상태.
+
+#### 시나리오 1: Pod Network Scan
+
+```bash
+# compromised-pod 내부에서 실행
+kubectl exec -it compromised-pod -- bash
+$ nmap -sn 10.244.0.0/16          # 전체 pod CIDR ICMP 스캔
+$ masscan 10.244.0.0/16 -p0-65535  # 빠른 full-port 스캔 (옵션)
+```
+
+탐지 신호: `unique_dst_count` 급증, `conn_rate` 폭증, `cross_namespace_flag=True`, `process_name=nmap/masscan`
+
+#### 시나리오 2: Port Scan
+
+```bash
+$ nmap -p 1-65535 10.244.2.8   # 특정 pod 대상 포트 스캔
+```
+
+탐지 신호: `unique_dst_port_count` 폭증, `port_entropy` 최대, 단시간 내 SYN-RST 반복
+
+#### 시나리오 3: Namespace Traversal
+
+```bash
+# default namespace의 pod에서 kube-system namespace 서비스 접근
+$ curl http://kube-dns.kube-system.svc.cluster.local
+$ curl http://10.96.0.10:9153/metrics   # Prometheus metrics 탈취 시도
+```
+
+탐지 신호: `cross_namespace_flag=True`, 서비스 의존 그래프에 없는 edge, `process_name=curl/wget`
+
+#### 시나리오 4: Abnormal Direct DB Access (backend 우회)
+
+```bash
+# frontend pod에서 직접 DB 접속 (정상적으로는 frontend→backend→DB여야 함)
+$ python3 -c "import psycopg2; psycopg2.connect(host='10.244.2.8', port=5432, ...)"
+# 또는
+$ redis-cli -h 10.244.1.9 -p 6379
+```
+
+탐지 신호: `(src=frontend, dst=redis, dst_port=6379)` — 서비스 그래프에 없는 edge; `process_name=python3` 이 frontend pod에서 DB 포트 접근
+
+#### 시나리오 5: Service Discovery Abuse (DNS Enumeration)
+
+```bash
+$ curl http://kubernetes.default.svc/api/v1/services    # K8s API 서비스 목록
+$ for ns in $(cat /etc/resolv.conf); do
+    dig @10.96.0.10 *.${ns}.svc.cluster.local;          # DNS enumeration
+  done
+```
+
+탐지 신호: DNS 쿼리 급증, 다수의 NXDOMAIN, kubernetes API server 직접 접근
+
+---
+
+### 9.4 탐지 모델 방향
+
+#### 서비스 의존 그래프 (Service Dependency Graph, SDG)
+
+정상 트래픽 관측 구간 동안 다음 형식으로 그래프를 학습한다.
+
+```
+노드: (namespace, pod_type, process_name)
+엣지: (src_node, dst_node, dst_port, protocol)
+
+정상 edge 예시:
+  (default, frontend, node)      → (default, cartservice, grpc_server)   : 7070/TCP
+  (default, checkoutservice, *)  → (default, redis, redis-server)         : 6379/TCP
+```
+
+탐지 기준 (우선순위 순):
+
+| 우선순위 | 탐지 규칙 | 탐지 대상 시나리오 |
+|---------|-----------|-----------------|
+| 1 | SDG에 없는 `(src, dst, port)` edge | Namespace Traversal, DB Direct Access |
+| 2 | `process_name`이 해당 pod에서 예상되지 않는 프로세스 | 모든 시나리오 |
+| 3 | `fanout_score > threshold` | Pod Network Scan |
+| 4 | `unique_dst_port_count > threshold` in time window | Port Scan |
+| 5 | DNS query rate 급증 + NXDOMAIN 비율 | Service Discovery Abuse |
+
+#### 탐지 알고리즘 선택지
+
+| 방식 | 알고리즘 | 특성 |
+|------|---------|------|
+| **Rule-based (Phase 1)** | SDG 엣지 룩업 | 빠른 탐지, 오탐 낮음, 새 공격 패턴에 취약 |
+| **Anomaly (Phase 2)** | Isolation Forest, LOF | 레이블 없이 행위 이상 탐지 가능 |
+| **Supervised (Phase 2)** | Random Forest, XGBoost | Feature importance로 cross-layer 기여도 분석 가능 |
+| **Graph-based (Phase 3, 선택)** | GNN (GraphSAGE, GAT) | 그래프 구조 이상 탐지, 계산 비용 높음 |
+
+Phase 1 (rule-based) + Phase 2 (supervised) 조합을 주 방법론으로 채택하고, GNN은 비교 실험으로 포함한다.
+
+---
+
+### 9.5 평가 지표 및 Baseline 비교
+
+#### 평가 지표
+
+| 지표 | 의미 |
+|------|------|
+| **Precision** | 탐지된 이벤트 중 실제 공격 비율 (오탐 관련) |
+| **Recall** | 실제 공격 중 탐지된 비율 (미탐 관련) |
+| **F1-score** | Precision/Recall 조화 평균 |
+| **FPR** (False Positive Rate) | 정상 트래픽 중 공격으로 잘못 판단한 비율 |
+| **Detection Latency** | 공격 발생 → 이벤트 탐지까지 걸리는 시간 (ms) |
+| **eBPF Overhead** | 파이프라인 활성화 시 CPU/Memory 사용 증가율 |
+
+#### Ablation Study — Cross-layer Context의 탐지 기여도
+
+| Baseline | 사용 feature | 목적 |
+|---------|-------------|------|
+| **Flow-only** | `inner_src_ip, inner_dst_ip, port, protocol` | 전통 IDS 방식과 동일 조건 |
+| **K8s Metadata** | Flow + `pod_name, namespace, service` | K8s 인지 IDS와 동일 조건 |
+| **본 연구 (제안)** | Flow + K8s + `outer_ip, process, pid, fanout` | Cross-layer 전체 |
+
+세 방식의 F1, FPR, 공격 흐름 설명력을 시나리오별로 비교하여 각 레이어 추가의 탐지 기여도를 정량화한다.
+
+---
+
+### 9.6 연구 단계별 계획
+
+```
+Phase 1 — eBPF 파이프라인 구현 (설계 + 구현)
+  ├─ kind 클러스터 구성 + Flannel VXLAN 확인
+  ├─ tc hook으로 outer/VXLAN/inner 패킷 파싱 구현
+  ├─ kprobe (tcp_connect)로 pid/process/netns 포착 구현
+  ├─ eBPF Map join → 단일 이벤트 출력 확인
+  └─ 출력 형식 검증: outer_src, outer_dst, inner_src, inner_dst, pid, comm, namespace
+
+Phase 2 — 데이터 수집 (실험 환경 구축 + 트래픽 생성)
+  ├─ Online Boutique 배포 + Locust 부하 생성 (정상 24시간)
+  ├─ 공격 시나리오 5종 순차 재현 (각 30분 이상)
+  ├─ K8s API 메타데이터 매핑 + 행위 feature 집계
+  └─ 데이터셋 완성: CSV/Parquet, 레이블 포함
+
+Phase 3 — 탐지 모델 구현 (서비스 그래프 + 알고리즘)
+  ├─ 정상 구간 데이터로 SDG 자동 구성
+  ├─ Rule-based 탐지기 구현 (SDG edge lookup + process check)
+  ├─ Supervised 모델 학습 (Random Forest / XGBoost)
+  └─ Ablation study: feature 그룹별 탐지율 비교
+
+Phase 4 — 평가 및 분석 (논문 작성 대상)
+  ├─ 시나리오별 Precision/Recall/F1/FPR 측정
+  ├─ Baseline 3종 비교 (flow-only, k8s, cross-layer)
+  ├─ Detection latency 측정 (eBPF event → alert)
+  ├─ eBPF 오버헤드 측정 (without/with pipeline)
+  └─ 결과 해석: cross-layer context가 어떤 시나리오에서 결정적인가
+```
+
+---
+
 ## 10. References
 
 ### eBPF 커널 보안 / 프로세스-네트워크 상관관계
 
 1. He, Y. et al., "Cross Container Attacks: The Bewildered eBPF on Clouds," *USENIX Security Symposium*, 2023.
-   - eBPF가 컨테이너 namespace를 우회하여 cross-host 공격 벡터가 될 수 있음을 증명; eBPF의 커널 수준 권한 특성 논증
+   [[PDF]](https://www.usenix.org/system/files/usenixsecurity23-he.pdf)
+   — eBPF가 컨테이너 namespace를 우회하여 cross-host 공격 벡터가 될 수 있음을 증명; eBPF 커널 수준 권한 특성 논증
 
 2. Fournier, G. et al., "Process level network security monitoring & enforcement with eBPF," *SSTIC*, 2020.
-   - process-network 레벨 eBPF 모니터링 초기 연구; pid/netns 기반 상관관계 기법 원형
+   [[PDF]](https://www.sstic.org/media/SSTIC2020/SSTIC-actes/process_level_network_security_monitoring_and_enfo/SSTIC2020-Article-process_level_network_security_monitoring_and_enforcement_with_ebpf-fournier_Cuzi8wu.pdf)
+   — process-network 레벨 eBPF 모니터링 초기 연구; pid/netns 기반 상관관계 기법 원형
 
 3. Bernal Bernabé, J. et al., "Combining System Visibility and Security Using eBPF," *ITASEC*, 2019.
-   - 시스템+네트워크 메타데이터 상관관계를 통한 보안 관측성 접근
+   [[PDF]](https://luca.ntop.org/ITASEC2019.pdf)
+   — 시스템+네트워크 메타데이터 상관관계를 통한 보안 관측성 접근
 
 4. Coppola, M. et al., "eBPF-PATROL: Protective Agent for Threat Recognition and Overreach Limitation," *arXiv:2511.18155*, 2025.
-   - UID/PID/cgroup/namespace를 결합한 eBPF 이벤트 생성; cgroup-aware 필터링으로 컨테이너 맥락 귀속
+   [[arXiv]](https://arxiv.org/abs/2511.18155)
+   — UID/PID/cgroup/namespace를 결합한 eBPF 이벤트 생성; cgroup-aware 필터링으로 컨테이너 맥락 귀속
 
 5. Zhang, R. et al., "eBPF-Guard: A Detection Method for Container Escape via Multi-level Monitoring," *Empirical Software Engineering*, Springer, 2025.
-   - kernel namespace+cgroup 기반 cross-host container interaction 모니터링 체인 구성
+   [[Springer]](https://link.springer.com/article/10.1007/s10664-025-10784-1)
+   — kernel namespace+cgroup 기반 cross-host container interaction 모니터링 체인 구성
 
+---
 
 ### eBPF 기반 보안 도구 비교 (Falco / Tetragon / Tracee)
 
 6. Hamm, L. et al., "Comparative Analysis of eBPF-Based Runtime Security Monitoring," *SCITEPRESS*, 2025.
-   - Falco, Tetragon, Tracee를 Container Escape/DoS/Cryptomining 기준으로 탐지 성능 및 자원 사용 비교; 도구별 한계 체계적 분석
+   [[PDF]](https://www.scitepress.org/Papers/2025/142727/142727.pdf)
+   — Falco, Tetragon, Tracee를 Container Escape/DoS/Cryptomining 기준으로 탐지 성능 및 자원 사용 비교; 도구별 한계 체계적 분석
 
 7. AccuKnox, "Container Runtime Security Tooling Comparison," *Technical Report*, 2023.
-   - Falco/Tetragon/KubeArmor 관측 범위, 정책 지원, 오버헤드 실용적 비교
+   [[PDF]](https://www.accuknox.com/wp-content/uploads/Container_Runtime_Security_Tooling.pdf)
+   — Falco/Tetragon/KubeArmor 관측 범위, 정책 지원, 오버헤드 실용적 비교
 
+---
 
 ### Kubernetes 보안 / Lateral Movement
 
 8. Brignoli, N. et al., "KubeHound: Identifying Attack Paths in Kubernetes Clusters," *Datadog Security Labs*, 2023.
-   - 공격 그래프(attack graph) 기반 Kubernetes lateral movement 경로 자동 분석; 서비스 의존 그래프와 연결
+   [[Web]](https://securitylabs.datadoghq.com/articles/kubehound-identify-kubernetes-attack-paths/)
+   — 공격 그래프(attack graph) 기반 Kubernetes lateral movement 경로 자동 분석; 서비스 의존 그래프와 연결
 
 9. Lin, Y. et al., "ShadowKube: Enhancing Kubernetes Security with Behavioral Monitoring and Honeypot Integration," *Cybersecurity*, Springer Nature, 2025.
-   - Kubernetes 행위 기반 베이스라인 탐지 + shadow honeypot 통합
+   [[Springer]](https://link.springer.com/article/10.1186/s42400-025-00372-7)
+   — Kubernetes 행위 기반 베이스라인 탐지 + shadow honeypot 통합
 
 10. Tigera, "Kubernetes Security: Lateral Movement Detection and Defense," *Technical Blog*, 2023.
-    - East-West 트래픽 기반 lateral movement 탐지 실용적 분석 및 eBPF 기반 대응 방안
+    [[Web]](https://www.tigera.io/blog/kubernetes-security-lateral-movement-detection-and-defense/)
+    — East-West 트래픽 기반 lateral movement 탐지 실용적 분석 및 eBPF 기반 대응 방안
 
+---
 
 ### eBPF 패킷 처리 / VXLAN 프로토콜
 
 11. Vieira, M. et al., "Fast Packet Processing with eBPF and XDP: Concepts, Code, and Applications," *UFMG Technical Report*, 2020.
-    - XDP/tc hook 동작 원리 및 패킷 파싱 기법; XDP vs tc 비교 (SKB 접근 시점 차이)
+    [[PDF]](https://homepages.dcc.ufmg.br/~mmvieira/so/papers/Fast_Packet_Processing_with_eBPF_and_XDP.pdf)
+    — XDP/tc hook 동작 원리 및 패킷 파싱 기법; XDP vs tc 비교 (SKB 접근 시점 차이)
 
-12. Mahalingam, M. et al., "RFC 7348 – Virtual eXtensible Local Area Network (VXLAN): A Framework for Overlaying Virtualized Layer 2 Networks over Layer 3 Networks," *IETF*, 2014.
-    - VXLAN 프로토콜 공식 표준; outer/inner 헤더 구조 정의
+12. Mahalingam, M. et al., "RFC 7348 – Virtual eXtensible Local Area Network (VXLAN)," *IETF*, 2014.
+    [[RFC]](https://datatracker.ietf.org/doc/html/rfc7348)
+    — VXLAN 프로토콜 공식 표준; outer/inner 헤더 구조 정의
 
 13. Cilium Project, "Introduction to eBPF in Cilium," *Official Documentation*, 2024.
-    - tc hook, eBPF Map, Kubernetes CNI 구현 원리; Hubble flow record 구조
+    [[Docs]](https://docs.cilium.io/en/stable/concepts/ebpf/intro/)
+    — tc hook, eBPF Map, Kubernetes CNI 구현 원리; Hubble flow record 구조
 
+---
 
 ### IDS 데이터셋 (기존 데이터셋의 한계 논증)
 
 14. Sharafaldin, I., Habibi Lashkari, A., Ghorbani, A.A., "Toward Generating a New Intrusion Detection Dataset and Intrusion Traffic Characterization," *ICISSP*, 2018.
-    - CICIDS2017 데이터셋 원논문; 전통 네트워크 환경 기반 2.5M 레코드, container context 없음
+    [[PDF]](https://www.scitepress.org/papers/2018/66398/66398.pdf) | [DOI: 10.5220/0006639801080116](https://www.paperdigest.org/paper/?paper_id=doi.org_10.5220_0006639801080116) | [[Dataset]](https://www.unb.ca/cic/datasets/ids-2017.html)
+    — CICIDS2017 원논문; 전통 네트워크 기반 2.5M 레코드, container context 없음
 
 15. Moustafa, N., Slay, J., "UNSW-NB15: A Comprehensive Data Set for Network Intrusion Detection Systems," *MilCIS*, 2015.
-    - UNSW-NB15 데이터셋 원논문; 9가지 공격 유형, Kubernetes/Pod 맥락 미반영
+    [[Dataset]](https://research.unsw.edu.au/projects/unsw-nb15-dataset)
+    — UNSW-NB15 원논문; 9가지 공격 유형, Kubernetes/Pod 맥락 미반영
 
 16. Tavallaee, M. et al., "A Detailed Analysis of the KDD CUP 99 Data Set," *IEEE CISDA*, 2009.
-    - NSL-KDD 데이터셋 원논문; 전통 IDS 벤치마크, East-West microservice 트래픽 미반영
+    [[IEEE]](https://ieeexplore.ieee.org/document/5356528/) | [[PDF]](https://www.ee.torontomu.ca/~bagheri/papers/cisda.pdf) | [[Dataset]](https://www.unb.ca/cic/datasets/nsl.html)
+    — NSL-KDD 원논문; 전통 IDS 벤치마크, East-West microservice 트래픽 미반영
 
 
