@@ -305,7 +305,7 @@ eBPF를 활용하여 outer(node), inner(pod), process 세 레이어의 정보를
 
 ---
 
-## 8. Related Work Transition Paragraph
+## 8. 요약(논문에 넣어본다 생각하고 작성)
 
 > eBPF와 Cilium은 Kubernetes 환경에서 고성능 네트워킹과 보안 정책 적용을 가능하게 하는 핵심 기술로 연구되어 왔다. 특히 Cilium은 iptables 기반 처리 방식의 한계를 완화하고, Hubble을 통해 서비스 간 flow 가시성을 제공한다. Falco, Tetragon 등의 eBPF 기반 보안 도구 역시 syscall 및 네트워크 이벤트 기반 이상 탐지를 제공한다. 그러나 기존 연구들은 공통적으로 다음 한계를 가진다. 첫째, VXLAN 기반 Overlay Network 환경에서 outer(node) 맥락과 inner(pod) 맥락을 단일 이벤트로 결합하지 못한다. 둘째, 네트워크 이벤트와 process context의 cross-layer correlation이 부재하다. 셋째, 서비스 의존 그래프를 기준으로 East-West Lateral Movement를 판단하는 탐지 모델을 제시하지 않는다. 본 연구는 이 갭을 해결하기 위해 eBPF 기반 cross-layer visibility reconstruction을 설계하고, 이를 통해 Kubernetes Overlay 환경에서 발생하는 lateral movement를 탐지하는 방법을 제안한다.
 
