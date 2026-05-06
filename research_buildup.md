@@ -612,22 +612,19 @@ Phase 4 — 평가 및 분석 (논문 작성 대상)
     [[RFC]](https://datatracker.ietf.org/doc/html/rfc7348)
     — VXLAN 프로토콜 공식 표준; outer/inner 헤더 구조 정의
 
-13. Cilium Project, "Introduction to eBPF in Cilium," *Official Documentation*, 2024.
-    [[Docs]](https://docs.cilium.io/en/stable/concepts/ebpf/intro/)
-    — tc hook, eBPF Map, Kubernetes CNI 구현 원리; Hubble flow record 구조
 
 
-### IDS 데이터셋 (기존 데이터셋의 한계 논증)
+### IDS 데이터셋 (기존 데이터셋의 한계)
 
-14. Sharafaldin, I., Habibi Lashkari, A., Ghorbani, A.A., "Toward Generating a New Intrusion Detection Dataset and Intrusion Traffic Characterization," *ICISSP*, 2018.
+13. Sharafaldin, I., Habibi Lashkari, A., Ghorbani, A.A., "Toward Generating a New Intrusion Detection Dataset and Intrusion Traffic Characterization," *ICISSP*, 2018.
     [[PDF]](https://www.scitepress.org/papers/2018/66398/66398.pdf) | [DOI: 10.5220/0006639801080116](https://www.paperdigest.org/paper/?paper_id=doi.org_10.5220_0006639801080116) | [[Dataset]](https://www.unb.ca/cic/datasets/ids-2017.html)
     — CICIDS2017 원논문; 전통 네트워크 기반 2.5M 레코드, container context 없음
 
-15. Moustafa, N., Slay, J., "UNSW-NB15: A Comprehensive Data Set for Network Intrusion Detection Systems," *MilCIS*, 2015.
+14. Moustafa, N., Slay, J., "UNSW-NB15: A Comprehensive Data Set for Network Intrusion Detection Systems," *MilCIS*, 2015.
     [[Dataset]](https://research.unsw.edu.au/projects/unsw-nb15-dataset)
     — UNSW-NB15 원논문; 9가지 공격 유형, Kubernetes/Pod 맥락 미반영
 
-16. Tavallaee, M. et al., "A Detailed Analysis of the KDD CUP 99 Data Set," *IEEE CISDA*, 2009.
+15. Tavallaee, M. et al., "A Detailed Analysis of the KDD CUP 99 Data Set," *IEEE CISDA*, 2009.
     [[IEEE]](https://ieeexplore.ieee.org/document/5356528/) | [[PDF]](https://www.ee.torontomu.ca/~bagheri/papers/cisda.pdf) | [[Dataset]](https://www.unb.ca/cic/datasets/nsl.html)
     — NSL-KDD 원논문; 전통 IDS 벤치마크, East-West microservice 트래픽 미반영
 
