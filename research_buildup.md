@@ -129,8 +129,7 @@ Kubernetes는 Pod 간 통신을 위해 Overlay Network를 사용한다. VXLAN, G
 
 
 pod_A 내부의 python3 프로세스(pid 1234)가 node_B의 pod_B에 있는 MySQL(3306)에 접근했는가?
-
-이 질문에 답하려면 세 레이어의 정보를 **단일 이벤트로 결합**해야 하며, 이것이 본 연구가 해결하려는 핵심 기술 문제다.
+-> 이 질문에 답하려면 세 레이어의 정보를 단일 이벤트로 결합해야 하며, 이것이 본 연구가 해결하려는 핵심 문제이다.
 
 ---
 
@@ -307,8 +306,6 @@ eBPF를 활용하여 outer(node), inner(pod), process 세 레이어의 정보를
 
 ## 9. Dataset 설계 및 연구 방향
 
----
-
 ### 9.1 실험 환경 구성
 
 #### Kubernetes 클러스터
@@ -338,9 +335,8 @@ cartservice       → redis
 recommendationservice → productcatalogservice
 ```
 
-이 그래프에 없는 edge는 모두 **이상 통신**으로 간주한다.
+이 그래프에 없는 edge는 모두 **이상 통신**으로 간주
 
----
 
 ### 9.2 자체 데이터셋 설계
 
@@ -463,7 +459,6 @@ $ for ns in $(cat /etc/resolv.conf); do
 
 탐지 신호: DNS 쿼리 급증, 다수의 NXDOMAIN, kubernetes API server 직접 접근
 
----
 
 ### 9.4 탐지 모델 방향
 
@@ -501,7 +496,6 @@ $ for ns in $(cat /etc/resolv.conf); do
 
 Phase 1 (rule-based) + Phase 2 (supervised) 조합을 주 방법론으로 채택하고, GNN은 비교 실험으로 포함한다.
 
----
 
 ### 9.5 평가 지표 및 Baseline 비교
 
@@ -526,7 +520,6 @@ Phase 1 (rule-based) + Phase 2 (supervised) 조합을 주 방법론으로 채택
 
 세 방식의 F1, FPR, 공격 흐름 설명력을 시나리오별로 비교하여 각 레이어 추가의 탐지 기여도를 정량화한다.
 
----
 
 ### 9.6 연구 단계별 계획
 
@@ -584,7 +577,6 @@ Phase 4 — 평가 및 분석 (논문 작성 대상)
    [[Springer]](https://link.springer.com/article/10.1007/s10664-025-10784-1)
    — kernel namespace+cgroup 기반 cross-host container interaction 모니터링 체인 구성
 
----
 
 ### eBPF 기반 보안 도구 비교 (Falco / Tetragon / Tracee)
 
@@ -595,8 +587,6 @@ Phase 4 — 평가 및 분석 (논문 작성 대상)
 7. AccuKnox, "Container Runtime Security Tooling Comparison," *Technical Report*, 2023.
    [[PDF]](https://www.accuknox.com/wp-content/uploads/Container_Runtime_Security_Tooling.pdf)
    — Falco/Tetragon/KubeArmor 관측 범위, 정책 지원, 오버헤드 실용적 비교
-
----
 
 ### Kubernetes 보안 / Lateral Movement
 
@@ -612,8 +602,6 @@ Phase 4 — 평가 및 분석 (논문 작성 대상)
     [[Web]](https://www.tigera.io/blog/kubernetes-security-lateral-movement-detection-and-defense/)
     — East-West 트래픽 기반 lateral movement 탐지 실용적 분석 및 eBPF 기반 대응 방안
 
----
-
 ### eBPF 패킷 처리 / VXLAN 프로토콜
 
 11. Vieira, M. et al., "Fast Packet Processing with eBPF and XDP: Concepts, Code, and Applications," *UFMG Technical Report*, 2020.
@@ -628,7 +616,6 @@ Phase 4 — 평가 및 분석 (논문 작성 대상)
     [[Docs]](https://docs.cilium.io/en/stable/concepts/ebpf/intro/)
     — tc hook, eBPF Map, Kubernetes CNI 구현 원리; Hubble flow record 구조
 
----
 
 ### IDS 데이터셋 (기존 데이터셋의 한계 논증)
 
