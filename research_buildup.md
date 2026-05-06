@@ -180,7 +180,7 @@ CICIDS2017 [14], NSL-KDD [16], UNSW-NB15 [15]는 이 분야에서 가장 널리 
 
 ## 4. Research Gap
 
-기존 연구를 정리하면 다음 갭이 명확하게 드러난다.
+기존 연구를 정리하면 다음 갭이 드러난다.
 
 ```
 [eBPF/Cilium 연구]     → 성능, 정책, observability에 집중
@@ -195,7 +195,6 @@ CICIDS2017 [14], NSL-KDD [16], UNSW-NB15 [15]는 이 분야에서 가장 널리 
   East-West Lateral Movement를 탐지하는 연구
 ```
 
-이 갭을 채우는 것이 본 연구의 존재 이유다.
 
 ---
 
